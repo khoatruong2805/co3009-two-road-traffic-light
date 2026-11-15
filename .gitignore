@@ -1,0 +1,16 @@
+Debug/
+Release/
+.metadata/
+*.o
+*.d
+*.elf
+*.map
+*.su
+*.lst
+*.launch
+*.pdsprj.*
+*.workspace
+simulation/build/
+__pycache__/
+*.hex.asm
+Backups/

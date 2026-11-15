@@ -1,0 +1,171 @@
+\section{Giới thiệu đề tài}
+\subsection{Bài toán}
+Hai đường giao nhau dùng chung một chu kỳ: khi một đường xanh hoặc vàng, đường kia phải đỏ. Trên XNUCLEO-F103RB, mỗi cụm đèn chỉ nhận hai tín hiệu điều khiển. Vì vậy bộ điều khiển phải phân biệt hai việc: quyết định \emph{màu} ở tầng máy trạng thái và mã hóa màu thành \emph{mức điện} ở tầng phần cứng. Sự phân tách này cho phép kiểm tra cùng thuật toán trên một mạch Proteus dùng sáu LED rời.
+
+\subsection{Chức năng}
+Hệ thống có ba chế độ: tự động theo thời gian, điều khiển từng pha bằng nút và chỉnh thời gian qua LCD. Cảm biến DHT20 cung cấp nhiệt độ và độ ẩm. Khi dữ liệu không hợp lệ, màn hình thay số đo bằng dấu gạch; chu kỳ đèn tiếp tục. Mặc định xanh 5\,s, vàng 2\,s, đỏ 7\,s. Các giá trị mới có hiệu lực đến lần reset.
+
+\subsection{Sơ đồ khối}
+\begin{center}
+\fbox{TIM2: 10 ms} $\longrightarrow$ \fbox{Scheduler}
+$\longrightarrow$ \fbox{Điều phối mode và ba FSM}\\[4pt]
+\fbox{Bốn nút} $\longrightarrow$ \fbox{Lọc dội, phát sự kiện}
+$\longrightarrow$ \fbox{FSM} $\longrightarrow$ \fbox{Hai cụm đèn}\\[4pt]
+\fbox{DHT20} $\longrightarrow$ \fbox{I2C1, kiểm tra CRC}
+$\longrightarrow$ \fbox{Dữ liệu hiển thị} $\longrightarrow$ \fbox{LCD}
+\end{center}
+Ngắt chỉ cập nhật thời gian và trạng thái sẵn sàng. Đọc nút, điều khiển đèn, truyền I2C và cập nhật màn hình đều thực hiện ở foreground.
+
+\section{Thiết kế hệ thống}
+\subsection{Chế độ và nút nhấn}
+\begin{center}
+\begin{tabular}{l|p{0.30\linewidth}|p{0.40\linewidth}}
+Chế độ & Nút tác động & Kết quả trên đèn và LCD\\ \hline
+Auto & MODE chuyển sang Manual & Hai đường chạy theo chu kỳ; LCD hiện AUTO và màu hai đường.\\
+Manual & NEXT tiến một pha; MODE vào Tuning & Khi mới vào cả hai đỏ. Các lần NEXT sau đi qua bốn pha theo thứ tự Auto.\\
+Tuning & NEXT chọn màu; PLUS/MINUS tăng/giảm; MODE xác nhận & Cả hai đỏ trong suốt quá trình chỉnh. LCD hiện màu, số giây và lỗi nếu có.\\
+\end{tabular}
+\end{center}
+Hàng thứ hai của LCD hiển thị môi trường ở cả ba mode, trừ lúc ưu tiên thông báo cấu hình sai. Mỗi thao tác chỉnh thay đổi một giây; giữ nút không làm tăng liên tục.
+
+\subsection{Sơ đồ chuyển chế độ}
+\begin{center}
+\fbox{Auto} $\stackrel{\rm MODE}{\longrightarrow}$
+\fbox{Manual: đỏ/đỏ} $\stackrel{\rm MODE}{\longrightarrow}$
+\fbox{Tuning: đỏ/đỏ}\\[3pt]
+Tuning $\longrightarrow$ Auto nếu xác nhận hợp lệ;
+nếu sai, Tuning giữ nguyên.
+\end{center}
+
+\subsection{Phân tích các chuyển tiếp}
+\subsubsection{Auto sang Manual}
+Nếu nhấn MODE ngay khi đường 1 đang vàng, bộ điều phối dừng timer của pha cũ, xóa sự kiện nút tồn và xuất đỏ/đỏ. Hai đường được ghi trong một lần ghi thanh ghi GPIOB. LCD chuyển sang MAN R/R ở lần làm mới kế tiếp. NEXT sau đó mới mở xanh đường 1. Sự kiện đồng thời với MODE không tự mở đường.
+
+\subsubsection{Manual sang Tuning}
+Đèn trở về đỏ/đỏ bất kể pha Manual trước đó. Bộ điều phối sao chép bộ thời gian đang dùng sang bản nháp, chọn màu đỏ làm mục đầu và xóa báo lỗi. Các task vẫn đăng ký cố định; không tạo thêm timer hay task mỗi lần đổi mode.
+
+\subsubsection{Tuning sang Auto}
+Giới hạn mỗi màu là 1--99\,s. Vì hai đường dùng cùng thời lượng xanh và vàng, thời gian đỏ của đường này bằng tổng thời gian xanh và vàng của đường kia:
+\[
+ T_{\mathrm{red}}=T_{\mathrm{green}}+T_{\mathrm{amber}}.
+\]
+MODE chỉ ghi bản nháp khi đẳng thức đúng. Ví dụ 8/5/2 bị từ chối; chỉnh xanh thành 6 cho 8/6/2 thì được nhận. Khi nhận, hệ thống khởi động trọn pha xanh đường 1 với timer mới. Không giữ lại phần thời gian thừa của vòng trước.
+
+\section{Hiện thực}
+\subsection{Kết nối và cấu hình ngoại vi}
+\begin{center}
+\begin{tabular}{l|l|l}
+Header & Chân STM32 & Vai trò theo thứ tự\\ \hline
+D3, D4 & PB3, PB5 & TL1\_A, TL1\_B: output push-pull\\
+D5, D6 & PB4, PB10 & TL2\_A, TL2\_B: output push-pull\\
+D7, D8 & PA8, PA9 & MODE, NEXT: input pull-up\\
+D9, D10 & PC7, PB6 & PLUS, MINUS: input pull-up\\
+I2C: SCL, SDA & PB8, PB9 & I2C1 remap, 100 kHz\\
+SWDIO, SWCLK & PA13, PA14 & Serial Wire; PB3/PB4 dành cho GPIO\\
+LED, USER & PA5, PC9; PC13 & Hỗ trợ kiểm tra trên bàn\\
+\end{tabular}
+\end{center}
+Dùng HSI 8 MHz. Với TIM2, $PSC=7999$ và $ARR=9$ nên chu kỳ ngắt bằng $(7999+1)(9+1)/(8\times10^6)=10$ ms. Trong cấu hình chẩn đoán, từng mã A:B được giữ hai giây để đo riêng cả hai cụm đèn. Cực tính nút, bảng mã và địa chỉ LCD trong firmware hiện là giá trị khởi đầu, chưa phải số đo.
+
+\subsection{Scheduler}
+\subsubsection{Cấu trúc dữ liệu}
+Mảng cố định 16 task đủ chứa chín task của ứng dụng, không cần cấp phát động. Đầu mảng lưu thời điểm đến hạn tuyệt đối; mỗi phần tử sau lưu khoảng cách so với phần tử đứng trước. Ví dụ task A đến hạn ở tick 5, B ở tick 8: hàng đợi lưu 5 và 3. Chèn C ở tick 6 cho kết quả 5, 1, 2; xóa C phải cộng lại 1 vào phần tử B để B vẫn chạy ở tick 8.
+
+\subsubsection{Thêm, xóa, cập nhật và phân phối}
+\texttt{SCH\_Add\_Task} và \texttt{SCH\_Delete\_Task} tìm vị trí, hiệu chỉnh khoảng cách và dịch mảng, mất $O(n)$. Đoạn sửa hàng đợi bảo toàn trạng thái mask ngắt trước đó. \texttt{SCH\_Update} trong ngắt chỉ tăng tick rồi so sánh với hạn của phần tử đầu: $O(1)$ kể cả khi nhiều task cùng hạn. \texttt{SCH\_Dispatch\_Tasks} lấy từng task đã đến hạn; one-shot có chu kỳ 0 bị bỏ sau một lần. Task định kỳ được xếp lại trước callback nên có thể tự xóa bằng ID. Nếu foreground đến muộn, bỏ các lượt bị lỡ và giữ mốc chu kỳ kế tiếp, tránh đọc dồn nhiều mẫu nút tại cùng một thời điểm thực. Callback chạy ngoài đoạn khóa.
+
+\subsubsection{Danh sách task ở chế độ ứng dụng}
+\begin{center}
+\begin{tabular}{l|l|p{0.43\linewidth}}
+Task & Chu kỳ & Công việc mỗi lần gọi\\ \hline
+Button, Mode & 10 ms & Lấy mẫu, lọc dội rồi xử lý chuyển chế độ.\\
+Software timer & 10 ms & So deadline với tick, phát cờ một lần.\\
+Auto, Manual, Tuning & 10 ms mỗi FSM & Chỉ FSM của mode hiện hành tác động.\\
+DHT20 & 10 ms & Kiểm tra deadline nội bộ; đợi ít nhất 90 ms sau lệnh đo, nghỉ khoảng 2 s giữa mẫu.\\
+Display & 100 ms & Dựng nội dung mong muốn cho hai dòng.\\
+LCD & 10 ms & Khởi tạo từng bước hoặc ghi tối đa một ký tự thay đổi.\\
+\end{tabular}
+\end{center}
+
+\subsection{Các module hỗ trợ}
+\subsubsection{Software timer}
+Timer lưu deadline theo tick. Khi mode thay đổi, cờ hết hạn và trạng thái armed đều được xóa; timer cũ không thể kết thúc pha mới. Thời lượng pha tính bằng giây được nhân 100 khi đặt timer.
+
+\subsubsection{Button}
+Ba mẫu nhấn liên tiếp ở chu kỳ 10 ms mới sinh một sự kiện nhấn. Giữ tiếp khoảng 0,8 s sinh cờ nhấn lâu riêng; phải thả ổn định mới có thể phát cạnh nhấn mới. Trong menu board, mỗi cạnh nhấn chỉnh một lần. Mạch C6 chỉ có ba nút, nên adapter dùng thời gian giữ BT2 để phân biệt tăng và giảm khi thả.
+
+\subsubsection{Điều khiển đèn}
+Bảng pha chỉ chứa năm cặp: xanh/đỏ, vàng/đỏ, đỏ/xanh, đỏ/vàng, đỏ/đỏ. Mọi FSM xuất pha qua một hàm; không gọi HAL. Adapter RB đổi màu qua bảng mã riêng cho mỗi module rồi ghi đồng thời bốn bit trong BSRR. Điều này bảo đảm ràng buộc ở tầng logic; tính đúng của màu thực phụ thuộc bảng mã đo được.
+
+\subsubsection{DHT20 và LCD}
+DHT20 ở địa chỉ 7 bit \texttt{0x38}. Sau khi cấp nguồn, task kiểm tra trạng thái và khôi phục các thanh ghi hiệu chuẩn nếu cần. Sau lệnh \texttt{AC 33 00}, task đợi tới hạn rồi đọc 7 byte. Phần mềm kiểm tra bit busy, bit calibration và CRC-8 (đa thức \texttt{0x31}, khởi tạo \texttt{0xFF}). Hai giá trị thô 20 bit được đổi theo $RH=100H/2^{20}$ và $T=200C/2^{20}-50$. Số hiển thị có một chữ số lẻ; khi CRC sai hoặc bus lỗi, xóa trạng thái hợp lệ và thử lại. Driver LCD giả định backpack PCF8574, địa chỉ \texttt{0x27}, điều khiển HD44780 ở chế độ 4 bit. Cần xác nhận địa chỉ và ngõ RS/E trên board của nhóm. Chỉ gửi các ký tự đã đổi để giảm thời gian chiếm bus.
+
+\subsection{Thiết kế các máy trạng thái}
+\subsubsection{Automatic}
+Ký hiệu $G_1$, $A_1$, $G_2$, $A_2$ lần lượt là pha xanh/vàng của đường được ghi chỉ số; đường còn lại đỏ.
+\[
+ \mathrm{G_1}\ \mathop{\longrightarrow}^{T_G}\ \mathrm{A_1}\
+ \mathop{\longrightarrow}^{T_A}\ \mathrm{G_2}\
+ \mathop{\longrightarrow}^{T_G}\ \mathrm{A_2}\
+ \mathop{\longrightarrow}^{T_A}\ \mathrm{G_1}.
+\]
+Hai pha xanh kéo dài $T_G$, hai pha vàng kéo dài $T_A$. Timer chỉ được đặt khi vào pha, không đặt lại ở mỗi lượt gọi FSM.
+
+\subsubsection{Manual}
+\[
+ \mathrm{RR}\ \longrightarrow G_1\longrightarrow A_1\longrightarrow G_2
+ \longrightarrow A_2\longrightarrow G_1.
+\]
+Mỗi mũi tên là một lần NEXT. Không có sự kiện thì giữ nguyên, không tự thoát Manual. MODE từ bất kỳ pha nào đều vào Tuning ở đỏ/đỏ.
+
+\subsubsection{Tuning}
+\[
+ \mathrm{RED}\ \mathop{\longrightarrow}^{\rm NEXT}\ \mathrm{GREEN}\
+ \mathop{\longrightarrow}^{\rm NEXT}\ \mathrm{AMBER}\
+ \mathop{\longrightarrow}^{\rm NEXT}\ \mathrm{RED}.
+\]
+PLUS/MINUS chỉnh mục hiện tại trong giới hạn; tại hai biên, nhấn thêm không quay vòng. Xác nhận sai tạo vòng lặp ở chính mục đang xem. Xác nhận đúng thoát sang Auto.
+
+\subsection{Thứ tự xử lý và các trường hợp biên}
+\begin{center}
+\begin{tabular}{p{0.25\linewidth}|p{0.29\linewidth}|p{0.31\linewidth}}
+Trạng thái & Sự kiện / điều kiện & Trạng thái và tác động\\ \hline
+Auto, bất kỳ pha & MODE cùng lượt timer hết & Manual, đỏ/đỏ; hủy timer trước khi Auto chạy.\\
+Manual, đỏ/đỏ & NEXT sau khi vào mode & Xanh 1/đỏ 2; nhấn liên tục không phát thêm cạnh.\\
+Tuning, một mục màu & MODE, $R\ne G+A$ & Giữ đỏ/đỏ; không sửa bộ thời gian hoạt động; hiển thị lỗi.\\
+Tuning, một mục màu & MODE, $R=G+A$ & Ghi cả bộ; Auto bắt đầu pha xanh 1 đủ $T_G$.\\
+Mọi mode & DHT20 lỗi / không ACK & Hết hiệu lực số đo; chu kỳ đèn vẫn tiếp tục.\\
+\end{tabular}
+\end{center}
+Mỗi FSM có cặp tệp riêng; biến mode, pha, thời gian hoạt động và bản nháp được khai báo trong \texttt{global.h/.c}.
+
+\section{Kết luận và kết quả kiểm tra}
+\subsection{Kết quả đã ghi nhận}
+Project RB build ở cấu hình Debug bằng STM32CubeIDE 1.7.0 với 0 lỗi, 0 cảnh báo. Test C trên máy tính đã kiểm tra thứ tự và xóa task, one-shot, task trùng hạn, hàng đợi đầy, bốn pha Auto, chuyển mode khi vàng, lọc dội nút và hai trường hợp xác nhận timing. Khung cảm biến giả cho ra 25,0$^\circ$C và 50,0\%; đổi một bit CRC làm số đo mất hiệu lực.
+
+Đã chạy mạch assignment bằng Proteus 8.10. File ban đầu thiếu khai báo nguồn \texttt{3.3V}; sau khi liên kết nguồn trên bản sao, Proteus báo không có model cho U1 (STM32F103R8T6) và U12 (SEN-18364). Vì vậy mạch assignment chưa chạy được firmware. Trên mạch đối chứng STM32F103C6, Proteus thực thi HEX biên dịch từ cùng scheduler và FSM; đã quan sát được hướng dọc xanh/ngang đỏ và hướng dọc đỏ/ngang xanh. Ảnh phiên chạy nằm ở \texttt{docs/proteus-c6.png}. Kết quả này không xác nhận DHT20 hoặc LCD vật lý.
+
+\subsection{Giới hạn và bước tiếp theo}
+Nhóm chưa nạp board, chưa xác định bảng mã đèn hai module, địa chỉ LCD thực, cực tính nút hoặc độ ổn định dài hạn. Cần chạy chế độ chẩn đoán, ghi bảng màu và các địa chỉ ACK, sau đó chuyển về bản ứng dụng và đo thời lượng pha bằng hai cạnh liên tiếp. Mỗi kết quả nên kèm ngày, commit, người đo và phương pháp. Cấu hình chỉ lưu RAM; nếu cần giữ sau mất điện, phải bổ sung cơ chế lưu và kiểm tra dữ liệu.
+
+\subsection{Phân công và đóng góp}
+Phân công dự kiến: Khoa phụ trách scheduler, timer, Auto và tích hợp; Minh phụ trách cấu hình board, nút, đèn, Manual và chuyển mode; Long phụ trách DHT20, LCD và Tuning. Commit khởi tạo là mốc tham chiếu chung, không quy cho cá nhân. Tỷ lệ đóng góp và kết quả của từng thành viên chưa được chốt: nhóm sẽ căn cứ commit, PR, phép thử và công việc thực tế khi nộp.
+
+\section{Hướng dẫn sử dụng mã nguồn}
+\subsection{Cấu trúc}
+\texttt{TrafficRB/Core} chứa ứng dụng và lớp truy cập board; \texttt{Drivers} chứa HAL/CMSIS trong project RB. \texttt{simulation} chứa hai mạch và adapter C6; \texttt{tests} chứa chương trình kiểm thử C dùng GPIO/I2C giả. \texttt{docs/team} chứa phiếu làm việc của từng thành viên.
+
+\subsection{Build và nạp}
+Clone repo \texttt{khoatruong2805/co3009-two-road-traffic-light}. Import thư mục \texttt{TrafficRB} dưới dạng Existing Projects into Workspace trong CubeIDE, kiểm tra target STM32F103RBTx và Serial Wire, rồi Build Project. Khi thử trên bàn, dùng \texttt{BOARD\_BRINGUP=1} để đo; đặt lại 0 trước khi thử ứng dụng. Dùng ST-LINK qua SWD với ELF trong \texttt{TrafficRB/Debug}. Không nạp HEX của Proteus C6 vào board RB.
+
+\subsection{Vận hành}
+Sau reset, quan sát đường 1 xanh và đường 2 đỏ. Bấm MODE khi đang vàng để kiểm tra cả hai đỏ, dùng NEXT để tiến pha. Vào Tuning, thử cố ý nhập bộ sai, sửa lại rồi xác nhận và so chu kỳ Auto mới. Trong quá trình đó, đối chiếu nhiệt độ/độ ẩm và thử tình huống mất cảm biến. README trong repo nêu cách mở Proteus, chạy lại host test và ghi kết quả theo đúng môi trường.
+
+\section*{Tài liệu tham khảo}
+\begin{enumerate}
+\item Tài liệu môn CO3009, \emph{Course Project Announcement and Guide}, HK1 2026--2027, mục A2--A5, Hình 2 và Bước 1--7.
+\item STMicroelectronics, \emph{STM32CubeF1} V1.8.7, HAL và CMSIS cho STM32F103; cấu hình board NUCLEO-F103RB trong STM32CubeMX 6.3.
+\item ASAIR, \emph{DHT20 Digital Temperature and Humidity Sensor, Technical Manual}, giao thức đo và cấu trúc bản tin.
+\item Mã tham khảo của giảng viên, GitHub \texttt{nhanksd85/STM32F103\_MCU}, nhánh \texttt{scheduler}; tham khảo cách tổ chức module.
+\end{enumerate}
+
