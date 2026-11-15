@@ -137,7 +137,7 @@ Tuning, một mục màu & MODE, $R=G+A$ & Ghi cả bộ; Auto bắt đầu pha 
 Mọi mode & DHT20 lỗi / không ACK & Hết hiệu lực số đo; chu kỳ đèn vẫn tiếp tục.\\
 \end{tabular}
 \end{center}
-Mỗi FSM có cặp tệp riêng; biến mode, pha, thời gian hoạt động và bản nháp được khai báo trong \texttt{global.h/.c}.
+Mỗi FSM có một cặp tệp riêng. Module \texttt{global} lưu mode, pha, bộ thời gian đang áp dụng và bản nháp.
 
 \section{Kết luận và kết quả kiểm tra}
 \subsection{Kết quả đã ghi nhận}
