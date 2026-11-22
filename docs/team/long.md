@@ -1,7 +1,9 @@
-# Long · DHT20, LCD và Tuning
+# Long - DHT20, LCD and Timing Adjustment
 
-Theo dấu một lần đo: gửi AC 33 00, chờ chuyển đổi, đọc 7 byte, kiểm tra busy/calibration/CRC và đổi đơn vị. Phân biệt dữ liệu giả của host với dữ liệu trên dây. Kiểm tra menu Tuning không áp dụng giá trị sai.
+Trace initialization, calibration-register recovery, the AC 33 00 measurement command, conversion wait, seven-byte read, status/CRC checks and fixed-point conversion. Explain how the LCD displays a timing error and how invalid values are prevented from becoming active.
 
-**Một thay đổi có thể tự làm:** thêm test cho giới hạn 1/99 giây và dữ liệu DHT20 busy liên tục rồi hồi phục; xác nhận ứng dụng tiếp tục đèn, xóa dữ liệu cũ và hiển thị số liệu mới. Có thể mở rộng mock PCF8574 để kiểm tra vị trí RS/E và nội dung hai dòng, thay vì chỉ kiểm tra đã gửi dữ liệu. Trên board ghi địa chỉ LCD thật, so sánh một lần đọc với điều kiện phòng.
+The host tests inspect PCF8574 enable pulses and LCD text, timing limits, CRC errors and bus failures. Reproduce these tests and compare the assumed backpack wiring with the physical LCD.
 
-File gợi ý: tests/test_controller.c, TrafficRB/Core/Src/dht20.c, TrafficRB/Core/Src/lcd.c, report/body.tex. Nhánh gợi ý: feature/environment-tuning-tests. Commit test, kết quả và thay đổi đã kiểm tra bằng tài khoản của mình.
+On the board, record the actual LCD address, observe real sensor measurements, check recovery after a sensor disconnect and measure the time taken to update the display. Commit the measured settings and report observations under your own account.
+
+Relevant files include tests/test_controller.c, TrafficRB/Core/Src/dht20.c, TrafficRB/Core/Src/lcd.c, TrafficRB/Core/Inc/board_config.h and report/body.tex. A suitable branch name is feature/environment-board-verification.

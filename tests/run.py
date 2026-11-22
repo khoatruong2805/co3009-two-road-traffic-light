@@ -7,3 +7,6 @@ with tempfile.TemporaryDirectory() as tmp:
  exe=Path(tmp)/('controller.exe' if os.name=='nt' else 'controller')
  subprocess.run([os.environ.get('CC','gcc'),'-std=c11','-Wall','-Wextra','-Werror','-DHOST_TEST','-I'+str(app/'Inc'),str(root/'tests/test_controller.c'),*[str(app/'Src'/(m+'.c')) for m in mods],'-o',str(exe)],check=True)
  subprocess.run([exe],check=True)
+ scheduler_exe=Path(tmp)/('scheduler.exe' if os.name=='nt' else 'scheduler')
+ subprocess.run([os.environ.get('CC','gcc'),'-std=c11','-Wall','-Wextra','-Werror','-DHOST_TEST','-I'+str(app/'Inc'),str(root/'tests/test_scheduler.c'),'-o',str(scheduler_exe)],check=True)
+ subprocess.run([scheduler_exe],check=True)

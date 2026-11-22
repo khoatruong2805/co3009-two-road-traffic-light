@@ -1,43 +1,99 @@
-# CO3009 · Đèn giao thông hai đường
+# CO3009 - Two-Road Traffic Light Controller
 
-Firmware cho XNUCLEO-F103RB: hai đường luân phiên xanh/vàng/đỏ, điều khiển tay, chỉnh thời gian, đọc DHT20 và hiển thị LCD 16×2. Nhánh `dev` dành cho nhóm tích hợp; `main` bắt đầu từ cùng bản nền. Commit khởi tạo là mốc chung, không tính vào đóng góp cá nhân. Chưa nạp board, chưa phải bản nộp cuối.
+STM32 firmware for the XNUCLEO-F103RB with Automatic, Manual and Timing Adjustment modes, DHT20 readings and a 16x2 LCD. A cooperative scheduler handles application tasks, with constant-time SCH_Update in the 10 ms timer interrupt.
 
-| Mục đích | Mở ở đâu |
+The application builds in STM32CubeIDE and passes host-side functional tests. The C6 Proteus circuit runs the shared traffic-control code. Physical-board calibration and demonstration are pending. See the requirement-by-requirement [verification record](docs/verification.md).
+
+| Component | Location |
 |---|---|
-| Import project thực | [TrafficRB](TrafficRB) – CubeIDE, MCU STM32F103RBTx |
-| Mô phỏng có thể chạy ngay | [TrafficC6.pdsprj](simulation/TrafficC6.pdsprj) – Proteus 8.10; giữ nguyên thư mục [firmware](simulation/firmware) |
-| Schematic assignment | [Assignment.pdsprj](simulation/Assignment.pdsprj) – bản sao đã sửa rail 3,3 V, còn thiếu hai model VSM |
-| Chạy lại test và xem kết quả | [Kiểm thử](docs/verification.md) |
-| Phân công, feature branch, PR | [Quy trình nhóm](CONTRIBUTING.md) |
-| Phần thân báo cáo | [report/body.tex](report/body.tex) – chèn vào khung LaTeX hiện có |
+| STM32CubeIDE board project | [TrafficRB](TrafficRB), STM32F103RBTx |
+| Runnable Proteus traffic demo | [TrafficC6.pdsprj](simulation/TrafficC6.pdsprj) and [firmware](simulation/firmware) |
+| Supplied assignment circuit | [Assignment.pdsprj](simulation/Assignment.pdsprj), power rail configured, two VSM models missing |
+| Tests and verification evidence | [tests](tests) and [verification record](docs/verification.md) |
+| Individual branches and commits | [Contribution workflow](CONTRIBUTING.md) |
+| English LaTeX report body | [report/body.tex](report/body.tex) |
 
-## Build, flash và đo trên board
+## Build and flash
 
-1. Clone `https://github.com/khoatruong2805/co3009-two-road-traffic-light.git`. Trong STM32CubeIDE chọn **File → Import → General → Existing Projects into Workspace** và chọn thư mục `TrafficRB`. Mở `TrafficRB.ioc`: board **NUCLEO-F103RB**, SYS → Debug **Serial Wire**. Đã có code sinh và HAL/CMSIS; không cần Generate Code để build. Nếu sinh lại từ .ioc, giữ nguyên vùng USER CODE.
-2. **Project → Build Project** (Debug). Sản phẩm: `TrafficRB/Debug/TrafficRB.elf`, `.hex`, `.bin`. Đã build với CubeIDE 1.7.0, FW_F1 V1.8.7, ARM GCC 9.3.1. Không nạp file của mạch C6 vào board.
-3. **Khi nhóm có board:** đặt `BOARD_BRINGUP=1` trong `Core/Inc/board_config.h`, build, kết nối ST-LINK qua USB; trong Run/Debug chọn **STM32 C/C++ Application**, ST-LINK/SWD, ELF của TrafficRB. Đây là chương trình đo trên bàn; nó lần lượt xuất cả bốn mã trên cả hai module, không điều khiển giao thông.
-4. Xem Live Expressions: `diag_ab` (00…11, giữ mỗi mã 2 s), `diag_buttons_raw` (bit 0…3), `diag_user_raw`, `diag_i2c_count`, `diag_i2c_addr`. PA5/PC9 đảo mức mỗi 0,5/1 s. Đợi khoảng 2 s để quét xong; địa chỉ là **7 bit**. Ghi kết quả cho từng module; sửa bảng màu, mặt nạ nút, địa chỉ và wiring backpack nếu cần.
-5. Đặt lại `BOARD_BRINGUP=0`, build và flash lại; kiểm tra hai hướng, thao tác nút và LCD. Nếu DHT20 không trả bản tin hợp lệ, LCD hiển thị dấu gạch. Timing áp dụng trong RAM; reset về mặc định.
+1. Clone https://github.com/khoatruong2805/co3009-two-road-traffic-light.git.
+2. In STM32CubeIDE, use **File > Import > General > Existing Projects into Workspace**, then select **TrafficRB**.
+3. Open **TrafficRB.ioc** and verify **NUCLEO-F103RB**, **SYS > Debug > Serial Wire**. Generated sources and HAL/CMSIS are included. Preserve USER CODE regions when regenerating.
+4. Use **Project > Build Project**. Debug output includes TrafficRB/Debug/TrafficRB.elf, .hex and .bin. Verified with STM32CubeIDE 1.7.0, STM32CubeF1 V1.8.7 and ARM GCC 9.3.1.
+5. Connect the XNUCLEO-F103RB through ST-LINK. Create a **STM32 C/C++ Application** run/debug configuration using ST-LINK, SWD and the TrafficRB ELF.
 
-## Nối dây và sử dụng
+Use RB firmware when flashing the physical board. The C6 HEX uses a different memory layout and GPIO adapter.
 
-| Grove/header | STM32 | Ý nghĩa |
+### Board calibration
+
+Set **BOARD_BRINGUP=1** in TrafficRB/Core/Inc/board_config.h, build and flash. This bench diagnostic cycles all four A:B codes on both light modules, toggles PA5/PC9 every 0.5/1 s, samples raw buttons and scans I2C.
+
+Watch these debugger Live Expressions:
+
+- **diag_ab** cycles through 00, 01, 10 and 11, holding each for 2 s.
+- **diag_buttons_raw** contains buttons 1 to 4 in bits 0 to 3. **diag_user_raw** is the USER button level.
+- **diag_i2c_count** and **diag_i2c_addr** contain responding **7-bit** addresses. Allow approximately 2 s for the scan.
+
+Record the observed colors independently for both modules. Update LIGHT_CODES_R1, LIGHT_CODES_R2, BUTTON_ACTIVE_LOW_MASK and LCD_ADDR7 from measurements. Check the PCF8574 wiring in board_config.h. Set **BOARD_BRINGUP=0**, rebuild and flash the application after calibration.
+
+## Wiring
+
+| Header | STM32 pin | Function |
 |---|---|---|
 | D3, D4 | PB3, PB5 | TL1_A, TL1_B |
 | D5, D6 | PB4, PB10 | TL2_A, TL2_B |
 | D7, D8 | PA8, PA9 | MODE, NEXT |
 | D9, D10 | PC7, PB6 | PLUS, MINUS |
-| SCL, SDA | PB8, PB9 | I2C1 remap, 100 kHz; DHT20 0x38; LCD mặc định 0x27 |
-| SWDIO, SWCLK | PA13, PA14 | Dành riêng cho debug; JTAG tắt để dùng PB3/PB4 |
+| SCL, SDA | PB8, PB9 | Remapped I2C1 at 100 kHz |
+| SWDIO, SWCLK | PA13, PA14 | Serial Wire debugging |
 
-**Auto:** xanh 1/đỏ 2 trong 5 s → vàng 1/đỏ 2 trong 2 s → đỏ 1/xanh 2 trong 5 s → đỏ 1/vàng 2 trong 2 s. **MODE** vào Manual ở đỏ/đỏ; **NEXT** tiến một pha. **MODE** lần nữa vào Tuning ở đỏ/đỏ. **NEXT** chọn đỏ/xanh/vàng, **PLUS/MINUS** đổi 1 s (1…99). **MODE** xác nhận và về Auto khi đỏ = xanh + vàng; nếu sai LCD báo lỗi và giữ đỏ/đỏ. Hàng hai LCD hiện nhiệt độ/độ ẩm, trừ lúc cần báo lỗi thời gian.
+JTAG is disabled to release PB3/PB4 while SWD remains enabled. TIM2 uses HSI at 8 MHz, prescaler 7999 and auto-reload 9 for a 10 ms tick. DHT20 uses address 0x38. The LCD defaults to 0x27, subject to the board scan.
+
+## Operation
+
+| Mode | Behavior and controls |
+|---|---|
+| Automatic | Road 1 green/road 2 red for 5 s, road 1 amber/road 2 red for 2 s, then the opposite direction for 5 s and 2 s. MODE enters Manual. |
+| Manual | Entry sets both roads red. NEXT advances one phase through the same four-phase sequence. MODE enters Timing Adjustment. |
+| Timing Adjustment | Both roads stay red. NEXT selects red, green or amber. PLUS/MINUS change the selected value by 1 s within 1 to 99 s. MODE applies values and returns to Automatic when red = green + amber. |
+
+Invalid timing keeps the controller in Timing Adjustment and displays **Need R = G + A**. Valid settings restart a full road 1 green phase. Settings are held in RAM and return to 7/5/2 s after reset. Simultaneous MODE and other key events give MODE priority.
+
+LCD row 1 shows the current mode or timing menu. Row 2 shows temperature/humidity or the timing error. Invalid or missing sensor data produces dashes. Each physical press produces one adjustment.
 
 ## Proteus
 
-Mở `simulation/TrafficC6.pdsprj` rồi bấm **Run (F12)**. Nếu di chuyển project, Program File của U1 là `firmware/traffic_demo.hex` tương đối với file mạch. Mạch dùng sáu LED mức thấp và ba nút; BT0=MODE, BT1=NEXT, BT2 nhấn ngắn rồi thả=PLUS, giữ ≥0,8 s rồi thả=MINUS. Bốn LED 7 đoạn lần lượt là mode (1/2/3), mục chỉnh (1/2/3 hoặc 0), hai chữ số giá trị (số pha hoặc thời gian đang chỉnh). C6 dùng chung scheduler và các FSM với firmware board; không mô phỏng DHT20/LCD.
+Open simulation/TrafficC6.pdsprj and press **Run (F12)**. U1's Program File is **firmware/traffic_demo.hex**, relative to the circuit. Keep those files together.
 
-File HEX nhỏ của **mạch demo** được giữ trong repo để có thể mở ngay. Để tạo lại: `python simulation/build_sim.py` nếu ARM GCC nằm trong PATH, hoặc `python simulation/build_sim.py --bin "<thư mục bin của GNU Tools for STM32>"`.
+The C6 circuit has six active-low LED outputs and three buttons:
 
-## Báo cáo và nộp
+- BT0 selects MODE.
+- BT1 selects NEXT.
+- A short BT2 press followed by release selects PLUS. Holding BT2 for at least 0.8 s before release selects MINUS.
 
-Trong file chính của khung báo cáo, chèn `\input{report/body}` ở phần nội dung (điều chỉnh đường dẫn nếu cần); dùng bộ gõ/phông tiếng Việt của khung. Nội dung bắt đầu bằng `\section`, không cần bìa mới hay TikZ. Trên bìa nhóm tự điền họ tên, MSSV, nhóm, URL repo và mã commit đã chốt. Hạn theo đề: **04/12/2026**. Quy tắc đặt tên PDF ở A4 và Bước 7 khác nhau; đối chiếu LMS trước khi nộp. Nhóm chỉ gắn tag cuối sau khi kiểm tra board và chốt kết quả thực tế.
+The four seven-segment digits show the mode (1/2/3), selected timing field (1/2/3, or 0 outside adjustment), and a two-digit value (phase number or selected duration). This adapter runs the shared scheduler and FSM sources. DHT20/LCD validation uses host mocks and later board measurements.
+
+The included demo HEX can be rebuilt with:
+
+```bash
+python simulation/build_sim.py
+# Or specify the installed ARM toolchain:
+python simulation/build_sim.py --bin "<GNU Tools for STM32 bin directory>"
+```
+
+The assignment circuit has a corrected 3.3 V power-rail binding. Proteus 8.10 reports missing simulation models for U1 (STM32F103R8T6) and U12 (SEN-18364). See the [verification record](docs/verification.md) for the observed errors.
+
+## Tests
+
+```bash
+python tests/run.py
+```
+
+Requires Python 3 and a C11 GCC compiler. Set **CC** to a compiler path if needed. On Windows, also add the compiler's bin directory to PATH so its DLLs can load. Tests return a nonzero exit code on failure.
+
+## Report and submission
+
+Insert `\input{report/body}` into the group's existing LaTeX report framework. The English body begins with `\section` and follows the supplied report template's section structure. It uses standard LaTeX commands.
+
+Complete the cover with names, student IDs, group, repository URL and the submitted commit hash. The announcement states **4 December 2026** as the report/source deadline and schedules the physical-board demo for week 15/16. Section A4 and Step 7 use different PDF filename patterns, so follow LMS instructions.
+
+The announcement requests the supplied report template. The group is preparing the body in LaTeX as requested by its members and should confirm that the resulting PDF format is accepted. After board verification and report completion, merge the agreed work into main, create the final submission tag and submit the PDF with the GitHub link on LMS.

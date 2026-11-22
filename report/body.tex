@@ -1,171 +1,179 @@
-\section{Giới thiệu đề tài}
-\subsection{Bài toán}
-Hai đường giao nhau dùng chung một chu kỳ: khi một đường xanh hoặc vàng, đường kia phải đỏ. Trên XNUCLEO-F103RB, mỗi cụm đèn chỉ nhận hai tín hiệu điều khiển. Vì vậy bộ điều khiển phải phân biệt hai việc: quyết định \emph{màu} ở tầng máy trạng thái và mã hóa màu thành \emph{mức điện} ở tầng phần cứng. Sự phân tách này cho phép kiểm tra cùng thuật toán trên một mạch Proteus dùng sáu LED rời.
+\section{Project Introduction}
+\subsection{Problem statement}
+Two intersecting roads share a traffic cycle: whenever one road is green or amber, the other must be red. Each traffic-light module on the XNUCLEO-F103RB receives two control signals. The controller therefore separates the requested \emph{color}, selected by a finite-state machine, from its \emph{electrical encoding}, implemented by the board adapter. The same application logic can then be tested on a Proteus circuit with discrete LEDs.
 
-\subsection{Chức năng}
-Hệ thống có ba chế độ: tự động theo thời gian, điều khiển từng pha bằng nút và chỉnh thời gian qua LCD. Cảm biến DHT20 cung cấp nhiệt độ và độ ẩm. Khi dữ liệu không hợp lệ, màn hình thay số đo bằng dấu gạch; chu kỳ đèn tiếp tục. Mặc định xanh 5\,s, vàng 2\,s, đỏ 7\,s. Các giá trị mới có hiệu lực đến lần reset.
+\subsection{Functions}
+The system provides automatic sequencing, manual phase selection, and timing adjustment using buttons and an LCD. A DHT20 supplies temperature and humidity. Invalid measurements are replaced with dashes while the traffic cycle continues. Default durations are green 5\,s, amber 2\,s, and red 7\,s. Adjustments remain in RAM until reset.
 
-\subsection{Sơ đồ khối}
+\subsection{Block diagram}
 \begin{center}
 \fbox{TIM2: 10 ms} $\longrightarrow$ \fbox{Scheduler}
-$\longrightarrow$ \fbox{Điều phối mode và ba FSM}\\[4pt]
-\fbox{Bốn nút} $\longrightarrow$ \fbox{Lọc dội, phát sự kiện}
-$\longrightarrow$ \fbox{FSM} $\longrightarrow$ \fbox{Hai cụm đèn}\\[4pt]
-\fbox{DHT20} $\longrightarrow$ \fbox{I2C1, kiểm tra CRC}
-$\longrightarrow$ \fbox{Dữ liệu hiển thị} $\longrightarrow$ \fbox{LCD}
+$\longrightarrow$ \fbox{Mode control and three FSMs}\\[4pt]
+\fbox{Four buttons} $\longrightarrow$ \fbox{Debounced events}
+$\longrightarrow$ \fbox{FSMs} $\longrightarrow$ \fbox{Two traffic modules}\\[4pt]
+\fbox{DHT20} $\longrightarrow$ \fbox{I2C1 and CRC}
+$\longrightarrow$ \fbox{Display data} $\longrightarrow$ \fbox{LCD}
 \end{center}
-Ngắt chỉ cập nhật thời gian và trạng thái sẵn sàng. Đọc nút, điều khiển đèn, truyền I2C và cập nhật màn hình đều thực hiện ở foreground.
+The interrupt only updates time and readiness. Button sampling, traffic outputs, I2C transfers, and display updates run in the foreground.
 
-\section{Thiết kế hệ thống}
-\subsection{Chế độ và nút nhấn}
+\section{System Design}
+\subsection{Modes and controls}
 \begin{center}
-\begin{tabular}{l|p{0.30\linewidth}|p{0.40\linewidth}}
-Chế độ & Nút tác động & Kết quả trên đèn và LCD\\ \hline
-Auto & MODE chuyển sang Manual & Hai đường chạy theo chu kỳ; LCD hiện AUTO và màu hai đường.\\
-Manual & NEXT tiến một pha; MODE vào Tuning & Khi mới vào cả hai đỏ. Các lần NEXT sau đi qua bốn pha theo thứ tự Auto.\\
-Tuning & NEXT chọn màu; PLUS/MINUS tăng/giảm; MODE xác nhận & Cả hai đỏ trong suốt quá trình chỉnh. LCD hiện màu, số giây và lỗi nếu có.\\
+\begin{tabular}{l|p{0.29\linewidth}|p{0.41\linewidth}}
+Mode & Controls & Traffic outputs and LCD\\ \hline
+Auto & MODE enters Manual. & Timed traffic cycle; LCD shows AUTO and both colors.\\
+Manual & NEXT advances a phase; MODE enters Tuning. & Entry sets both roads red. NEXT follows the four automatic phases.\\
+Tuning & NEXT selects a color; PLUS/MINUS adjust; MODE confirms. & Both roads remain red. LCD shows the selected duration and any error.\\
 \end{tabular}
 \end{center}
-Hàng thứ hai của LCD hiển thị môi trường ở cả ba mode, trừ lúc ưu tiên thông báo cấu hình sai. Mỗi thao tác chỉnh thay đổi một giây; giữ nút không làm tăng liên tục.
+The second LCD row shows environmental data in all modes, except when an invalid configuration message takes priority. Each adjustment changes one second; holding a board button does not repeatedly change the value.
 
-\subsection{Sơ đồ chuyển chế độ}
+\subsection{Mode transition diagram}
 \begin{center}
 \fbox{Auto} $\stackrel{\rm MODE}{\longrightarrow}$
-\fbox{Manual: đỏ/đỏ} $\stackrel{\rm MODE}{\longrightarrow}$
-\fbox{Tuning: đỏ/đỏ}\\[3pt]
-Tuning $\longrightarrow$ Auto nếu xác nhận hợp lệ;
-nếu sai, Tuning giữ nguyên.
+\fbox{Manual: red/red} $\stackrel{\rm MODE}{\longrightarrow}$
+\fbox{Tuning: red/red}\\[3pt]
+Tuning $\longrightarrow$ Auto on valid confirmation; otherwise remain in Tuning.
 \end{center}
 
-\subsection{Phân tích các chuyển tiếp}
-\subsubsection{Auto sang Manual}
-Nếu nhấn MODE ngay khi đường 1 đang vàng, bộ điều phối dừng timer của pha cũ, xóa sự kiện nút tồn và xuất đỏ/đỏ. Hai đường được ghi trong một lần ghi thanh ghi GPIOB. LCD chuyển sang MAN R/R ở lần làm mới kế tiếp. NEXT sau đó mới mở xanh đường 1. Sự kiện đồng thời với MODE không tự mở đường.
+\subsection{Transition analysis}
+\subsubsection{Auto to Manual}
+MODE stops the previous phase timer, clears pending button events, and outputs red/red, including when pressed during amber. The RB adapter updates both modules in one GPIOB register write. The LCD changes to MAN R/R on its next refresh. A subsequent NEXT opens road 1; an event simultaneous with MODE cannot open it.
 
-\subsubsection{Manual sang Tuning}
-Đèn trở về đỏ/đỏ bất kể pha Manual trước đó. Bộ điều phối sao chép bộ thời gian đang dùng sang bản nháp, chọn màu đỏ làm mục đầu và xóa báo lỗi. Các task vẫn đăng ký cố định; không tạo thêm timer hay task mỗi lần đổi mode.
+\subsubsection{Manual to Tuning}
+Both roads become red regardless of the previous manual phase. The controller copies active durations into a draft, selects red, and clears the error flag. Tasks remain registered throughout operation; changing mode does not create additional tasks or timers.
 
-\subsubsection{Tuning sang Auto}
-Giới hạn mỗi màu là 1--99\,s. Vì hai đường dùng cùng thời lượng xanh và vàng, thời gian đỏ của đường này bằng tổng thời gian xanh và vàng của đường kia:
+\subsubsection{Tuning to Auto}
+Each color is limited to 1--99\,s. Both roads use the same green and amber durations, so the red interval equals the opposing green and amber intervals:
 \[
- T_{\mathrm{red}}=T_{\mathrm{green}}+T_{\mathrm{amber}}.
+T_{\mathrm{red}}=T_{\mathrm{green}}+T_{\mathrm{amber}}.
 \]
-MODE chỉ ghi bản nháp khi đẳng thức đúng. Ví dụ 8/5/2 bị từ chối; chỉnh xanh thành 6 cho 8/6/2 thì được nhận. Khi nhận, hệ thống khởi động trọn pha xanh đường 1 với timer mới. Không giữ lại phần thời gian thừa của vòng trước.
+MODE commits the draft only when this equality holds. For example, 8/5/2 is rejected; changing green to 6 produces the valid set 8/6/2. Successful confirmation starts a full road-1 green phase with a fresh timer.
 
-\section{Hiện thực}
-\subsection{Kết nối và cấu hình ngoại vi}
-\begin{center}
-\begin{tabular}{l|l|l}
-Header & Chân STM32 & Vai trò theo thứ tự\\ \hline
-D3, D4 & PB3, PB5 & TL1\_A, TL1\_B: output push-pull\\
-D5, D6 & PB4, PB10 & TL2\_A, TL2\_B: output push-pull\\
-D7, D8 & PA8, PA9 & MODE, NEXT: input pull-up\\
-D9, D10 & PC7, PB6 & PLUS, MINUS: input pull-up\\
-I2C: SCL, SDA & PB8, PB9 & I2C1 remap, 100 kHz\\
-SWDIO, SWCLK & PA13, PA14 & Serial Wire; PB3/PB4 dành cho GPIO\\
-LED, USER & PA5, PC9; PC13 & Hỗ trợ kiểm tra trên bàn\\
-\end{tabular}
-\end{center}
-Dùng HSI 8 MHz. Với TIM2, $PSC=7999$ và $ARR=9$ nên chu kỳ ngắt bằng $(7999+1)(9+1)/(8\times10^6)=10$ ms. Trong cấu hình chẩn đoán, từng mã A:B được giữ hai giây để đo riêng cả hai cụm đèn. Cực tính nút, bảng mã và địa chỉ LCD trong firmware hiện là giá trị khởi đầu, chưa phải số đo.
-
-\subsection{Scheduler}
-\subsubsection{Cấu trúc dữ liệu}
-Mảng cố định 16 task đủ chứa chín task của ứng dụng, không cần cấp phát động. Đầu mảng lưu thời điểm đến hạn tuyệt đối; mỗi phần tử sau lưu khoảng cách so với phần tử đứng trước. Ví dụ task A đến hạn ở tick 5, B ở tick 8: hàng đợi lưu 5 và 3. Chèn C ở tick 6 cho kết quả 5, 1, 2; xóa C phải cộng lại 1 vào phần tử B để B vẫn chạy ở tick 8.
-
-\subsubsection{Thêm, xóa, cập nhật và phân phối}
-\texttt{SCH\_Add\_Task} và \texttt{SCH\_Delete\_Task} tìm vị trí, hiệu chỉnh khoảng cách và dịch mảng, mất $O(n)$. Đoạn sửa hàng đợi bảo toàn trạng thái mask ngắt trước đó. \texttt{SCH\_Update} trong ngắt chỉ tăng tick rồi so sánh với hạn của phần tử đầu: $O(1)$ kể cả khi nhiều task cùng hạn. \texttt{SCH\_Dispatch\_Tasks} lấy từng task đã đến hạn; one-shot có chu kỳ 0 bị bỏ sau một lần. Task định kỳ được xếp lại trước callback nên có thể tự xóa bằng ID. Nếu foreground đến muộn, bỏ các lượt bị lỡ và giữ mốc chu kỳ kế tiếp, tránh đọc dồn nhiều mẫu nút tại cùng một thời điểm thực. Callback chạy ngoài đoạn khóa.
-
-\subsubsection{Danh sách task ở chế độ ứng dụng}
+\section{Implementation}
+\subsection{Connections and peripheral configuration}
 \begin{center}
 \begin{tabular}{l|l|p{0.43\linewidth}}
-Task & Chu kỳ & Công việc mỗi lần gọi\\ \hline
-Button, Mode & 10 ms & Lấy mẫu, lọc dội rồi xử lý chuyển chế độ.\\
-Software timer & 10 ms & So deadline với tick, phát cờ một lần.\\
-Auto, Manual, Tuning & 10 ms mỗi FSM & Chỉ FSM của mode hiện hành tác động.\\
-DHT20 & 10 ms & Kiểm tra deadline nội bộ; đợi ít nhất 90 ms sau lệnh đo, nghỉ khoảng 2 s giữa mẫu.\\
-Display & 100 ms & Dựng nội dung mong muốn cho hai dòng.\\
-LCD & 10 ms & Khởi tạo từng bước hoặc ghi tối đa một ký tự thay đổi.\\
+Header & STM32 pin & Function, in listed order\\ \hline
+D3, D4 & PB3, PB5 & TL1\_A, TL1\_B; push-pull outputs\\
+D5, D6 & PB4, PB10 & TL2\_A, TL2\_B; push-pull outputs\\
+D7, D8 & PA8, PA9 & MODE, NEXT; pull-up inputs\\
+D9, D10 & PC7, PB6 & PLUS, MINUS; pull-up inputs\\
+SCL, SDA & PB8, PB9 & Remapped I2C1 at 100 kHz\\
+SWDIO, SWCLK & PA13, PA14 & Serial Wire; PB3/PB4 remain available as GPIO\\
+LED, USER & PA5, PC9; PC13 & Bench diagnostics\\
+\end{tabular}
+\end{center}
+HSI supplies an 8\,MHz clock. TIM2 uses $PSC=7999$ and $ARR=9$, giving an interrupt period of $(7999+1)(9+1)/(8\times10^6)=10$\,ms. Diagnostic mode holds each A:B code for two seconds so both modules can be measured separately. Button polarity, color encodings, and the LCD address are initial assumptions awaiting hardware verification.
+
+\subsection{Scheduler}
+\subsubsection{Data structure}
+A fixed array of 16 tasks holds the nine application tasks without dynamic allocation. The head stores an absolute deadline; each subsequent entry stores its delay relative to its predecessor. If A is due at tick 5 and B at tick 8, the queue stores 5 and 3. Inserting C at tick 6 produces 5, 1, 2. Removing C restores B's relative delay to 3.
+
+\subsubsection{Add, delete, update, and dispatch}
+\texttt{SCH\_Add\_Task} and \texttt{SCH\_Delete\_Task} search, adjust delays, and shift array entries in $O(n)$ time. Queue modifications preserve the previous interrupt mask. The interrupt function \texttt{SCH\_Update} increments the tick and checks only the head deadline: $O(1)$ even with simultaneous deadlines.
+
+\texttt{SCH\_Dispatch\_Tasks} removes due tasks. A zero period identifies a one-shot task. Periodic tasks are rescheduled before their callback, allowing a callback to delete itself by ID. If foreground execution is delayed, missed releases are skipped while preserving the periodic schedule; this avoids taking several button samples at one physical instant. Callbacks execute outside the critical section.
+
+\subsubsection{Application tasks}
+\begin{center}
+\begin{tabular}{l|l|p{0.46\linewidth}}
+Task & Period & Work per invocation\\ \hline
+Button, Mode & 10 ms & Sample and debounce inputs, then handle mode changes.\\
+Software timer & 10 ms & Compare the deadline and raise a one-time expiry flag.\\
+Auto, Manual, Tuning & 10 ms each & Only the active mode's FSM changes the application state.\\
+DHT20 & 10 ms & Check internal deadlines; wait at least 90 ms after a measurement command and about 2 s between samples.\\
+Display & 100 ms & Prepare the desired two-row text.\\
+LCD & 10 ms & Advance initialization or write at most one changed character.\\
 \end{tabular}
 \end{center}
 
-\subsection{Các module hỗ trợ}
+\subsection{Supporting modules}
 \subsubsection{Software timer}
-Timer lưu deadline theo tick. Khi mode thay đổi, cờ hết hạn và trạng thái armed đều được xóa; timer cũ không thể kết thúc pha mới. Thời lượng pha tính bằng giây được nhân 100 khi đặt timer.
+The timer stores a deadline in scheduler ticks. Mode changes clear both its armed state and expiry flag, preventing an old timer from ending a new phase. Seconds are multiplied by 100 when arming the timer.
 
-\subsubsection{Button}
-Ba mẫu nhấn liên tiếp ở chu kỳ 10 ms mới sinh một sự kiện nhấn. Giữ tiếp khoảng 0,8 s sinh cờ nhấn lâu riêng; phải thả ổn định mới có thể phát cạnh nhấn mới. Trong menu board, mỗi cạnh nhấn chỉnh một lần. Mạch C6 chỉ có ba nút, nên adapter dùng thời gian giữ BT2 để phân biệt tăng và giảm khi thả.
+\subsubsection{Buttons}
+Three consecutive pressed samples at 10\,ms intervals produce a press event. Holding for approximately 0.8\,s produces a separate long-press flag. A stable release is required before a new press event. Each board-menu press adjusts once. The C6 circuit has only three buttons, so its adapter distinguishes increment and decrement by the duration of BT2, applying the action on release.
 
-\subsubsection{Điều khiển đèn}
-Bảng pha chỉ chứa năm cặp: xanh/đỏ, vàng/đỏ, đỏ/xanh, đỏ/vàng, đỏ/đỏ. Mọi FSM xuất pha qua một hàm; không gọi HAL. Adapter RB đổi màu qua bảng mã riêng cho mỗi module rồi ghi đồng thời bốn bit trong BSRR. Điều này bảo đảm ràng buộc ở tầng logic; tính đúng của màu thực phụ thuộc bảng mã đo được.
+\subsubsection{Traffic outputs}
+The phase table contains only green/red, amber/red, red/green, red/amber, and red/red. Every FSM requests a phase through one function and contains no HAL calls. The RB adapter translates colors through a separate table for each module and writes all four GPIO bits together using BSRR. Logical safety is verified; physical colors still depend on measured encodings.
 
-\subsubsection{DHT20 và LCD}
-DHT20 ở địa chỉ 7 bit \texttt{0x38}. Sau khi cấp nguồn, task kiểm tra trạng thái và khôi phục các thanh ghi hiệu chuẩn nếu cần. Sau lệnh \texttt{AC 33 00}, task đợi tới hạn rồi đọc 7 byte. Phần mềm kiểm tra bit busy, bit calibration và CRC-8 (đa thức \texttt{0x31}, khởi tạo \texttt{0xFF}). Hai giá trị thô 20 bit được đổi theo $RH=100H/2^{20}$ và $T=200C/2^{20}-50$. Số hiển thị có một chữ số lẻ; khi CRC sai hoặc bus lỗi, xóa trạng thái hợp lệ và thử lại. Driver LCD giả định backpack PCF8574, địa chỉ \texttt{0x27}, điều khiển HD44780 ở chế độ 4 bit. Cần xác nhận địa chỉ và ngõ RS/E trên board của nhóm. Chỉ gửi các ký tự đã đổi để giảm thời gian chiếm bus.
+\subsubsection{DHT20 and LCD}
+The DHT20 uses 7-bit address \texttt{0x38}. After power-up, its task checks status and restores calibration registers when needed. Following \texttt{AC 33 00}, it waits until the conversion deadline and reads seven bytes. It checks busy and calibration bits and CRC-8, using polynomial \texttt{0x31} and initial value \texttt{0xFF}. The two 20-bit readings convert as $RH=100H/2^{20}$ and $T=200C/2^{20}-50$. Values are displayed with one decimal place. CRC, bus, or prolonged busy failures invalidate the reading and trigger recovery.
 
-\subsection{Thiết kế các máy trạng thái}
+The LCD driver assumes a PCF8574 backpack at \texttt{0x27}, connected to an HD44780 in 4-bit mode. The actual address and backpack pin mapping require board verification. Initialization proceeds in timed steps; normal updates send only changed characters. I2C calls have bounded timeouts, but their actual effect on board timing must still be measured.
+
+\subsection{Finite-state machines}
 \subsubsection{Automatic}
-Ký hiệu $G_1$, $A_1$, $G_2$, $A_2$ lần lượt là pha xanh/vàng của đường được ghi chỉ số; đường còn lại đỏ.
+$G_1$, $A_1$, $G_2$, and $A_2$ denote green or amber on the indexed road; the other road is red.
 \[
- \mathrm{G_1}\ \mathop{\longrightarrow}^{T_G}\ \mathrm{A_1}\
- \mathop{\longrightarrow}^{T_A}\ \mathrm{G_2}\
- \mathop{\longrightarrow}^{T_G}\ \mathrm{A_2}\
- \mathop{\longrightarrow}^{T_A}\ \mathrm{G_1}.
+G_1\ \mathop{\longrightarrow}^{T_G}\ A_1\
+\mathop{\longrightarrow}^{T_A}\ G_2\
+\mathop{\longrightarrow}^{T_G}\ A_2\
+\mathop{\longrightarrow}^{T_A}\ G_1.
 \]
-Hai pha xanh kéo dài $T_G$, hai pha vàng kéo dài $T_A$. Timer chỉ được đặt khi vào pha, không đặt lại ở mỗi lượt gọi FSM.
+Green phases last $T_G$ and amber phases last $T_A$. A timer is armed on phase entry, not on every FSM invocation.
 
 \subsubsection{Manual}
 \[
- \mathrm{RR}\ \longrightarrow G_1\longrightarrow A_1\longrightarrow G_2
- \longrightarrow A_2\longrightarrow G_1.
+\mathrm{RR}\longrightarrow G_1\longrightarrow A_1\longrightarrow G_2
+\longrightarrow A_2\longrightarrow G_1.
 \]
-Mỗi mũi tên là một lần NEXT. Không có sự kiện thì giữ nguyên, không tự thoát Manual. MODE từ bất kỳ pha nào đều vào Tuning ở đỏ/đỏ.
+Each arrow requires NEXT. Without an event, the current phase remains unchanged. MODE from any manual phase enters Tuning with both roads red.
 
 \subsubsection{Tuning}
 \[
- \mathrm{RED}\ \mathop{\longrightarrow}^{\rm NEXT}\ \mathrm{GREEN}\
- \mathop{\longrightarrow}^{\rm NEXT}\ \mathrm{AMBER}\
- \mathop{\longrightarrow}^{\rm NEXT}\ \mathrm{RED}.
+\mathrm{RED}\ \mathop{\longrightarrow}^{\rm NEXT}\ \mathrm{GREEN}\
+\mathop{\longrightarrow}^{\rm NEXT}\ \mathrm{AMBER}\
+\mathop{\longrightarrow}^{\rm NEXT}\ \mathrm{RED}.
 \]
-PLUS/MINUS chỉnh mục hiện tại trong giới hạn; tại hai biên, nhấn thêm không quay vòng. Xác nhận sai tạo vòng lặp ở chính mục đang xem. Xác nhận đúng thoát sang Auto.
+PLUS/MINUS modify the selected value within its limits, without wrapping at either boundary. Invalid confirmation stays at the selected field; valid confirmation returns to Auto.
 
-\subsection{Thứ tự xử lý và các trường hợp biên}
+\subsection{Processing order and boundary cases}
 \begin{center}
-\begin{tabular}{p{0.25\linewidth}|p{0.29\linewidth}|p{0.31\linewidth}}
-Trạng thái & Sự kiện / điều kiện & Trạng thái và tác động\\ \hline
-Auto, bất kỳ pha & MODE cùng lượt timer hết & Manual, đỏ/đỏ; hủy timer trước khi Auto chạy.\\
-Manual, đỏ/đỏ & NEXT sau khi vào mode & Xanh 1/đỏ 2; nhấn liên tục không phát thêm cạnh.\\
-Tuning, một mục màu & MODE, $R\ne G+A$ & Giữ đỏ/đỏ; không sửa bộ thời gian hoạt động; hiển thị lỗi.\\
-Tuning, một mục màu & MODE, $R=G+A$ & Ghi cả bộ; Auto bắt đầu pha xanh 1 đủ $T_G$.\\
-Mọi mode & DHT20 lỗi / không ACK & Hết hiệu lực số đo; chu kỳ đèn vẫn tiếp tục.\\
+\begin{tabular}{p{0.21\linewidth}|p{0.29\linewidth}|p{0.35\linewidth}}
+State & Event or condition & Result\\ \hline
+Auto, any phase & MODE coincides with expiry & Manual, red/red; cancel the timer before Auto executes.\\
+Manual, red/red & NEXT after mode entry & Road 1 green, road 2 red; a held press adds no extra edge.\\
+Tuning, any field & MODE with $R\ne G+A$ & Stay red/red; preserve active timings and display an error.\\
+Tuning, any field & MODE with $R=G+A$ & Commit all values; start a full road-1 green phase.\\
+Any mode & DHT20 failure or no ACK & Invalidate measurements; continue the traffic cycle.\\
 \end{tabular}
 \end{center}
-Mỗi FSM có một cặp tệp riêng. Module \texttt{global} lưu mode, pha, bộ thời gian đang áp dụng và bản nháp.
+Each FSM has its own source/header pair. The \texttt{global} module contains the mode, phase, active timings, and draft timings.
 
-\section{Kết luận và kết quả kiểm tra}
-\subsection{Kết quả đã ghi nhận}
-Project RB build ở cấu hình Debug bằng STM32CubeIDE 1.7.0 với 0 lỗi, 0 cảnh báo. Test C trên máy tính đã kiểm tra thứ tự và xóa task, one-shot, task trùng hạn, hàng đợi đầy, bốn pha Auto, chuyển mode khi vàng, lọc dội nút và hai trường hợp xác nhận timing. Khung cảm biến giả cho ra 25,0$^\circ$C và 50,0\%; đổi một bit CRC làm số đo mất hiệu lực.
+\section{Results and Conclusions}
+\subsection{Recorded software results}
+On 22 November 2026, STM32CubeIDE 1.7.0 completed the RB builds with zero errors and zero warnings. Host C tests passed scheduler insertion/deletion, equal deadlines, full capacity, one-shot execution, delayed dispatch, callback self-deletion, clock wrap, and 20,000 randomized operations compared with an absolute-deadline reference.
 
-Đã chạy mạch assignment bằng Proteus 8.10. File ban đầu thiếu khai báo nguồn \texttt{3.3V}; sau khi liên kết nguồn trên bản sao, Proteus báo không có model cho U1 (STM32F103R8T6) và U12 (SEN-18364). Vì vậy mạch assignment chưa chạy được firmware. Trên mạch đối chứng STM32F103C6, Proteus thực thi HEX biên dịch từ cùng scheduler và FSM; đã quan sát được hướng dọc xanh/ngang đỏ và hướng dọc đỏ/ngang xanh. Ảnh phiên chạy nằm ở \texttt{docs/proteus-c6.png}. Kết quả này không xác nhận DHT20 hoặc LCD vật lý.
+Controller tests passed all four automatic phases, mode changes during amber, simultaneous MODE and NEXT, stale-timer cancellation, debounce, long presses, invalid and valid timing confirmation, and 1--99\,s limits for all three colors. A decoded mock DHT20 frame produced 25.0$^\circ$C and 50.0\% humidity. Tests also covered CRC corruption, missing I2C devices, calibration recovery, and a permanently busy sensor followed by recovery.
 
-\subsection{Giới hạn và bước tiếp theo}
-Nhóm chưa nạp board, chưa xác định bảng mã đèn hai module, địa chỉ LCD thực, cực tính nút hoặc độ ổn định dài hạn. Cần chạy chế độ chẩn đoán, ghi bảng màu và các địa chỉ ACK, sau đó chuyển về bản ứng dụng và đo thời lượng pha bằng hai cạnh liên tiếp. Mỗi kết quả nên kèm ngày, commit, người đo và phương pháp. Cấu hình chỉ lưu RAM; nếu cần giữ sau mất điện, phải bổ sung cơ chế lưu và kiểm tra dữ liệu.
+An LCD bus decoder checked PCF8574 enable pulses, initialization, and rendered text. The application completed 360,000 scheduler ticks, representing one virtual hour, while checking that every requested phase retained a red opposing road. This is a logic test with simulated time, not a one-hour hardware endurance result.
 
-\subsection{Phân công và đóng góp}
-Phân công dự kiến: Khoa phụ trách scheduler, timer, Auto và tích hợp; Minh phụ trách cấu hình board, nút, đèn, Manual và chuyển mode; Long phụ trách DHT20, LCD và Tuning. Commit khởi tạo là mốc tham chiếu chung, không quy cho cá nhân. Tỷ lệ đóng góp và kết quả của từng thành viên chưa được chốt: nhóm sẽ căn cứ commit, PR, phép thử và công việc thực tế khi nộp.
+Proteus 8.10 runs the C6 comparison circuit using firmware built from the shared scheduler and FSMs. Both green/red directions have been observed. The supplied assignment circuit initially lacked a \texttt{3.3V} power-rail definition; after correcting the copy, Proteus reported missing models for U1 (STM32F103R8T6) and U12 (SEN-18364). That circuit therefore cannot execute the complete application with the available models. The C6 test does not simulate the DHT20 or LCD.
 
-\section{Hướng dẫn sử dụng mã nguồn}
-\subsection{Cấu trúc}
-\texttt{TrafficRB/Core} chứa ứng dụng và lớp truy cập board; \texttt{Drivers} chứa HAL/CMSIS trong project RB. \texttt{simulation} chứa hai mạch và adapter C6; \texttt{tests} chứa chương trình kiểm thử C dùng GPIO/I2C giả. \texttt{docs/team} chứa phiếu làm việc của từng thành viên.
+\subsection{Limitations and remaining work}
+The team has not yet recorded physical-board results. Required work includes repeated flashing, LED and button checks, separate color-code tables for both traffic modules, an I2C scan, LCD mapping verification, temperature/humidity readings, measured phase durations, and a documented endurance run. Record the date, commit, operator, method, and outcome of each test. Firmware settings persist only in RAM.
 
-\subsection{Build và nạp}
-Clone repo \texttt{khoatruong2805/co3009-two-road-traffic-light}. Import thư mục \texttt{TrafficRB} dưới dạng Existing Projects into Workspace trong CubeIDE, kiểm tra target STM32F103RBTx và Serial Wire, rồi Build Project. Khi thử trên bàn, dùng \texttt{BOARD\_BRINGUP=1} để đo; đặt lại 0 trước khi thử ứng dụng. Dùng ST-LINK qua SWD với ELF trong \texttt{TrafficRB/Debug}. Không nạp HEX của Proteus C6 vào board RB.
+The software checks support the implemented behavior, but do not establish complete hardware compliance. Each member must also make their own substantive commits. The final submission needs the group's cover, identifiers, contribution record, final PDF, and matching repository commit or tag.
 
-\subsection{Vận hành}
-Sau reset, quan sát đường 1 xanh và đường 2 đỏ. Bấm MODE khi đang vàng để kiểm tra cả hai đỏ, dùng NEXT để tiến pha. Vào Tuning, thử cố ý nhập bộ sai, sửa lại rồi xác nhận và so chu kỳ Auto mới. Trong quá trình đó, đối chiếu nhiệt độ/độ ẩm và thử tình huống mất cảm biến. README trong repo nêu cách mở Proteus, chạy lại host test và ghi kết quả theo đúng môi trường.
+\subsection{Responsibilities and contributions}
+Planned responsibilities are: Khoa---scheduler, timer, Auto, and integration; Minh---board setup, buttons, traffic outputs, Manual, and mode transitions; Long---DHT20, LCD, and Tuning. The initial project commit is a shared starting point and is not assigned to any student's contribution. Final contribution percentages must be based on actual commits, reviews, experiments, and report work.
 
-\section*{Tài liệu tham khảo}
+\section{Source Code and Operation}
+\subsection{Repository structure}
+\texttt{TrafficRB/Core} contains application code and board access; the project's \texttt{Drivers} directory contains HAL/CMSIS. The \texttt{simulation} directory contains both circuits and the C6 adapter. The \texttt{tests} directory contains host tests with mock GPIO/I2C. Member work sheets are in \texttt{docs/team}.
+
+\subsection{Build and flash}
+Clone \texttt{khoatruong2805/co3009-two-road-traffic-light}. In CubeIDE, import \texttt{TrafficRB} using Existing Projects into Workspace. Verify STM32F103RBTx and Serial Wire, then build. Use \texttt{BOARD\_BRINGUP=1} for bench measurements and restore it to 0 before testing the application. Flash the RB ELF using ST-LINK over SWD. Do not flash the C6 simulation HEX to the RB board.
+
+\subsection{Operating procedure}
+After reset, check road 1 green and road 2 red. Press MODE during amber to confirm red/red, then use NEXT to advance manual phases. Enter Tuning, try an invalid set, correct it, and confirm the new automatic cycle. Check environmental readings and sensor-disconnection behavior. The repository README explains Proteus operation, host tests, and recording results for the actual test environment.
+
+\section*{References}
 \begin{enumerate}
-\item Tài liệu môn CO3009, \emph{Course Project Announcement and Guide}, HK1 2026--2027, mục A2--A5, Hình 2 và Bước 1--7.
-\item STMicroelectronics, \emph{STM32CubeF1} V1.8.7, HAL và CMSIS cho STM32F103; cấu hình board NUCLEO-F103RB trong STM32CubeMX 6.3.
-\item ASAIR, \emph{DHT20 Digital Temperature and Humidity Sensor, Technical Manual}, giao thức đo và cấu trúc bản tin.
-\item Mã tham khảo của giảng viên, GitHub \texttt{nhanksd85/STM32F103\_MCU}, nhánh \texttt{scheduler}; tham khảo cách tổ chức module.
+\item CO3009, \emph{Course Project Announcement and Guide}, semester 1, 2026--2027: sections A2--A5, Figure 2, and Steps 1--7.
+\item STMicroelectronics, \emph{STM32CubeF1} V1.8.7, HAL/CMSIS for STM32F103; NUCLEO-F103RB configuration in STM32CubeMX 6.3.
+\item ASAIR, \emph{DHT20 Digital Temperature and Humidity Sensor, Technical Manual}: measurement protocol and data format.
+\item Lecturer's reference repository, GitHub \texttt{nhanksd85/STM32F103\_MCU}, branch \texttt{scheduler}: module organization.
 \end{enumerate}
-
