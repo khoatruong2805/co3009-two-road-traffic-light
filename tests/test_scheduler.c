@@ -41,9 +41,38 @@ static void delete_self(void)
     assert(SCH_Delete_Task(self_id));
 }
 
+/* An overdue head and a maximum-delay task can be more than INT32_MAX
+ * ticks apart even though both individual delays are valid. */
+static void test_distant_deadline(void)
+{
+    const uint32_t starts[] = {0, UINT32_MAX - 8};
+    for (unsigned i = 0; i < 2; ++i) {
+        SCH_Init();
+        now = starts[i];
+        calls[0] = calls[1] = 0;
+        assert(SCH_Add_Task(callback_0, 0, 0));
+        SCH_Update();
+        SCH_Update();
+        uint32_t due = SCH_Now() + INT32_MAX;
+        assert(SCH_Add_Task(callback_1, INT32_MAX, 0));
+        SCH_Dispatch_Tasks();
+        assert(calls[0] == 1 && calls[1] == 0);
+        now = due - 1;
+        refresh();
+        SCH_Dispatch_Tasks();
+        assert(calls[1] == 0);
+        SCH_Update();
+        SCH_Dispatch_Tasks();
+        assert(calls[1] == 1 && count == 0);
+    }
+    calls[0] = calls[1] = 0;
+    puts("PASS scheduler: overdue head with INT32_MAX delay, including clock wrap");
+}
+
 int main(void)
 {
     signal(SIGABRT, assertion_failed);
+    test_distant_deadline();
     SCH_Init();
     assert(!SCH_Add_Task(NULL, 0, 1));
     assert(!SCH_Add_Task(callback_0, UINT32_MAX, 0));

@@ -19,7 +19,9 @@ static void refresh(void){ready=count && (int32_t)(now-q[0].delay)>=0;}
 static void insert(Task t,uint32_t due){
     unsigned i=0; uint32_t prev=0;
     for(;i<count;i++){uint32_t next=prev+q[i].delay;
-        if((int32_t)(due-next)<0) break;
+        /* Compare offsets from now: subtracting two deadlines can exceed
+         * INT32_MAX when an overdue task meets a valid maximum delay. */
+        if((int32_t)(due-now)<(int32_t)(next-now)) break;
         prev=next;
     }
     t.delay=due-prev;
