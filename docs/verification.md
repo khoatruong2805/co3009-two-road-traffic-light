@@ -18,9 +18,11 @@ TIM2 generates the 10 ms tick from an 8 MHz clock with prescaler 7999 and auto-r
 
 ## Proteus
 
-On 22 November the C6 circuit ran in Proteus 8.10. Both directions took a turn at green while the other stayed red. The screenshot is from the earlier firmware. Commit `4df019e` updated the demo HEX. The C6 circuit has LEDs and buttons, with no DHT20 or LCD.
+On 22 November the C6 circuit ran in Proteus 8.10. Both directions took a turn at green while the other stayed red. Commit `4df019e` updated the demo HEX. The C6 circuit has LEDs and buttons, with no DHT20 or LCD.
 
-![C6 simulation with the vertical road green and the horizontal road red](proteus-c6.png)
+| North-south green, east-west red | East-west green, north-south red |
+|---|---|
+| ![North-south green](proteus-c6.png) | ![East-west green](proteus-c6-east-west.png) |
 
 The original assignment schematic stopped at an undefined 3.3 V rail. The copy in this repository fixes the rail. Proteus then reported `No model specified` for U1 (STM32F103R8T6) and U12 (SEN-18364).
 
