@@ -10,8 +10,6 @@ The application builds in STM32CubeIDE and passes host-side functional tests. Th
 | Runnable Proteus traffic demo | [TrafficC6.pdsprj](simulation/TrafficC6.pdsprj) and [firmware](simulation/firmware) |
 | Supplied assignment circuit | [Assignment.pdsprj](simulation/Assignment.pdsprj), power rail configured, two VSM models missing |
 | Tests and verification evidence | [tests](tests) and [verification record](docs/verification.md) |
-| Individual branches and commits | [Contribution workflow](CONTRIBUTING.md) |
-| English LaTeX report body | [report/body.tex](report/body.tex) |
 
 ## Build and flash
 
@@ -92,8 +90,7 @@ Requires Python 3 and a C11 GCC compiler. Set **CC** to a compiler path if neede
 
 ## Report and submission
 
-Insert `\input{report/body}` into the group's existing LaTeX report framework. The English body begins with `\section` and follows the supplied report template's section structure. It uses standard LaTeX commands.
 
 Complete the cover with names, student IDs, group, repository URL and the submitted commit hash. The announcement states **4 December 2026** as the report/source deadline and schedules the physical-board demo for week 15/16. Section A4 and Step 7 use different PDF filename patterns, so follow LMS instructions.
 
-The announcement requests the supplied report template. The group is preparing the body in LaTeX as requested by its members and should confirm that the resulting PDF format is accepted. After board verification and report completion, merge the agreed work into main, create the final submission tag and submit the PDF with the GitHub link on LMS.
+The announcement requests the supplied report template. After board verification and report completion, merge the agreed work into main, create the final submission tag and submit the PDF with the GitHub link on LMS.

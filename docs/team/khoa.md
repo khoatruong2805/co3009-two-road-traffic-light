@@ -6,4 +6,4 @@ The existing tests cover self-deletion, equal deadlines, clock wraparound and ra
 
 During board testing, measure PA5/PC9 intervals and the four automatic phase durations. Record the method, actual values, firmware commit and your name. Update the scheduler and Automatic sections of the report with observations.
 
-Relevant files include tests/test_scheduler.c, TrafficRB/Core/Src/scheduler.c, docs/verification.md and report/body.tex. A suitable branch name is feature/scheduler-board-verification.
+Relevant files include tests/test_scheduler.c, TrafficRB/Core/Src/scheduler.c, docs/verification.md. A suitable branch name is feature/scheduler-board-verification.

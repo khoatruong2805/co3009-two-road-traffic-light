@@ -21,8 +21,8 @@ Last software review: **22 November 2026**.
 | DHT20 temperature/humidity and recovery | Calibration-register recovery, known frame, CRC error, missing I2C, busy timeout and recovery | Passed mock-bus tests; actual sensor unverified |
 | Stability | 360,000 ticks = one virtual hour; traffic continued and every phase request had a red opposing road | Passed simulated-time logic test; physical endurance run pending |
 | Board bring-up | Diagnostic mode implements code sweep and I2C scan | Not executed on the team's board |
-| Each member commits using their own account | Member work sheets and CONTRIBUTING instructions available | Pending substantive personal commits; shared setup commits do not satisfy this requirement |
-| FSM diagrams and report | English LaTeX body contains mode/Auto/Manual/Tuning diagrams and transition analysis | Body prepared; final cover, IDs, contribution evidence and PDF pending |
+| Each member commits using their own account | Member work sheets in docs/team | Check individual contributions in the final main history |
+| FSM diagrams and report | The team maintains the report separately | Body prepared; final cover, IDs, contribution evidence and PDF pending |
 | Submission | README describes PDF, GitHub access and final commit/tag | Final PDF and matching submission revision pending |
 
 ## Tool runs

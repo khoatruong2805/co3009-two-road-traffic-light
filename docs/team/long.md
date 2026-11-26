@@ -6,4 +6,4 @@ The host tests inspect PCF8574 enable pulses and LCD text, timing limits, CRC er
 
 On the board, record the actual LCD address, observe real sensor measurements, check recovery after a sensor disconnect and measure the time taken to update the display. Commit the measured settings and report observations under your own account.
 
-Relevant files include tests/test_controller.c, TrafficRB/Core/Src/dht20.c, TrafficRB/Core/Src/lcd.c, TrafficRB/Core/Inc/board_config.h and report/body.tex. A suitable branch name is feature/environment-board-verification.
+Relevant files include tests/test_controller.c, TrafficRB/Core/Src/dht20.c, TrafficRB/Core/Src/lcd.c, TrafficRB/Core/Inc/board_config.h. A suitable branch name is feature/environment-board-verification.
