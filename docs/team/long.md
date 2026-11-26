@@ -1,9 +1,5 @@
-# Long - DHT20, LCD and Timing Adjustment
+# Long — DHT20, LCD and timing adjustment
 
-Trace initialization, calibration-register recovery, the AC 33 00 measurement command, conversion wait, seven-byte read, status/CRC checks and fixed-point conversion. Explain how the LCD displays a timing error and how invalid values are prevented from becoming active.
+Check the LCD address and backpack wiring on the board. Record a temperature and humidity reading, unplug the DHT20, then reconnect it. Note when the display switches to dashes and how long it takes for readings to return.
 
-The host tests inspect PCF8574 enable pulses and LCD text, timing limits, CRC errors and bus failures. Reproduce these tests and compare the assumed backpack wiring with the physical LCD.
-
-On the board, record the actual LCD address, observe real sensor measurements, check recovery after a sensor disconnect and measure the time taken to update the display. Commit the measured settings and report observations under your own account.
-
-Relevant files include tests/test_controller.c, TrafficRB/Core/Src/dht20.c, TrafficRB/Core/Src/lcd.c, TrafficRB/Core/Inc/board_config.h. A suitable branch name is feature/environment-board-verification.
+In the timing menu, try 8/5/2 for red/green/amber. The LCD should show `Need R = G + A`. Change green to 6 s and confirm that Automatic mode restarts. The [controller tests](../../tests/test_controller.c) cover both cases with a simulated LCD.
